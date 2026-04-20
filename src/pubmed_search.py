@@ -17,6 +17,7 @@ import os
 import time
 import json
 import logging
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -67,17 +68,28 @@ class PubMedSearcher:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get(self, url: str, params: dict) -> dict:
-        """Perform a GET request with retries and rate-limit delay."""
+    def _get(self, url: str, params: dict, response_type: str = "json") -> Any:
+        """Perform a GET request with retries and rate-limit delay.
+
+        Parameters
+        ----------
+        url:           E-utilities endpoint URL
+        params:        query parameters (modified in-place)
+        response_type: ``"json"`` (default) returns a parsed dict;
+                       ``"text"`` returns the raw response text.
+        """
         if self.api_key:
             params["api_key"] = self.api_key
-        params["retmode"] = "json"
+        if response_type == "json":
+            params["retmode"] = "json"
         for attempt in range(3):
             try:
                 resp = requests.get(url, params=params, timeout=30)
                 resp.raise_for_status()
                 time.sleep(self.delay)
-                return resp.json()
+                if response_type == "json":
+                    return resp.json()
+                return resp.text
             except Exception as exc:
                 logger.warning("PubMed request failed (attempt %d): %s", attempt + 1, exc)
                 time.sleep(2 ** attempt)
@@ -143,63 +155,89 @@ class PubMedSearcher:
             )
             data = self._get(
                 f"{EUTILS_BASE}/efetch.fcgi",
-                {"db": "pubmed", "id": ",".join(batch), "rettype": "abstract"},
+                {"db": "pubmed", "id": ",".join(batch), "rettype": "abstract", "retmode": "xml"},
+                response_type="text",
             )
-            # efetch JSON returns PubmedArticleSet structure
+            # efetch returns PubMed XML; parse it into records
             batch_records = self._parse_efetch(data, batch)
             cache_set("pubmed_fetch", cache_key, batch_records)
             records.extend(batch_records)
 
         return records
 
-    def _parse_efetch(self, data: Any, pmids: list[str]) -> list[dict]:
+    def _parse_efetch(self, xml_text: str, pmids: list[str]) -> list[dict]:
         """
-        Parse the PubMed efetch JSON response into a flat list of dicts.
+        Parse the PubMed efetch XML response into a flat list of dicts.
 
-        The efetch endpoint with retmode=json returns the raw XML converted
-        to JSON by NCBI. The structure varies; we extract the fields we need
-        defensively.
+        Malformed records are skipped with a warning rather than raising.
         """
         articles = []
 
-        # Top-level key differs between single and multi-article responses
-        pubmed_set = data.get("PubmedArticleSet", {})
-        article_list = pubmed_set.get("PubmedArticle", [])
-        if isinstance(article_list, dict):
-            article_list = [article_list]
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError as exc:
+            logger.warning("Failed to parse efetch XML response: %s", exc)
+            return [{"pmid": p, "title": "", "abstract": "", "journal": "", "year": "", "doi": ""} for p in pmids]
 
-        for art in article_list:
-            medline = art.get("MedlineCitation", {})
-            pmid = str(medline.get("PMID", {}).get("#text", medline.get("PMID", "")))
-            article = medline.get("Article", {})
-            title = self._extract_text(article.get("ArticleTitle", ""))
-            abstract_obj = article.get("Abstract", {})
-            abstract_text = self._extract_text(
-                abstract_obj.get("AbstractText", "")
-            )
-            journal = article.get("Journal", {}).get("Title", "")
-            pub_date = article.get("Journal", {}).get("JournalIssue", {}).get("PubDate", {})
-            year = pub_date.get("Year", pub_date.get("MedlineDate", "")[:4] if isinstance(pub_date.get("MedlineDate", ""), str) else "")
+        for art in root.findall("PubmedArticle"):
+            try:
+                medline = art.find("MedlineCitation")
+                if medline is None:
+                    raise ValueError("Missing MedlineCitation")
 
-            # DOI
-            id_list = article.get("ELocationID", [])
-            if isinstance(id_list, dict):
-                id_list = [id_list]
-            doi = next(
-                (i.get("#text", "") for i in id_list if i.get("@EIdType") == "doi"),
-                "",
-            )
+                pmid_el = medline.find("PMID")
+                pmid = pmid_el.text.strip() if pmid_el is not None and pmid_el.text else ""
 
-            articles.append(
-                {
-                    "pmid": pmid,
-                    "title": title,
-                    "abstract": abstract_text,
-                    "journal": journal,
-                    "year": str(year),
-                    "doi": doi,
-                }
-            )
+                article_el = medline.find("Article")
+                if article_el is None:
+                    raise ValueError(f"Missing Article for PMID {pmid!r}")
+
+                title = self._extract_text(article_el.find("ArticleTitle"))
+
+                abstract_el = article_el.find("Abstract")
+                abstract_text = ""
+                if abstract_el is not None:
+                    parts = []
+                    for at in abstract_el.findall("AbstractText"):
+                        parts.append(self._extract_text(at))
+                    abstract_text = " ".join(p for p in parts if p)
+
+                journal_el = article_el.find("Journal")
+                journal = ""
+                year = ""
+                if journal_el is not None:
+                    title_el = journal_el.find("Title")
+                    journal = title_el.text.strip() if title_el is not None and title_el.text else ""
+                    issue = journal_el.find("JournalIssue")
+                    if issue is not None:
+                        pub_date = issue.find("PubDate")
+                        if pub_date is not None:
+                            year_el = pub_date.find("Year")
+                            if year_el is not None and year_el.text:
+                                year = year_el.text.strip()
+                            else:
+                                medline_date = pub_date.find("MedlineDate")
+                                if medline_date is not None and medline_date.text:
+                                    year = medline_date.text.strip()[:4]
+
+                doi = ""
+                for loc_id in article_el.findall("ELocationID"):
+                    if loc_id.get("EIdType") == "doi" and loc_id.text:
+                        doi = loc_id.text.strip()
+                        break
+
+                articles.append(
+                    {
+                        "pmid": pmid,
+                        "title": title,
+                        "abstract": abstract_text,
+                        "journal": journal,
+                        "year": year,
+                        "doi": doi,
+                    }
+                )
+            except Exception as exc:
+                logger.warning("Skipping malformed PubMed record: %s", exc)
 
         # Fall back: if parsing yields nothing, return stub records for each PMID
         if not articles:
@@ -208,21 +246,11 @@ class PubMedSearcher:
         return articles
 
     @staticmethod
-    def _extract_text(obj: Any) -> str:
-        """Recursively extract plain text from a PubMed JSON text node."""
-        if isinstance(obj, str):
-            return obj
-        if isinstance(obj, dict):
-            return obj.get("#text", "")
-        if isinstance(obj, list):
-            parts = []
-            for item in obj:
-                if isinstance(item, str):
-                    parts.append(item)
-                elif isinstance(item, dict):
-                    parts.append(item.get("#text", ""))
-            return " ".join(parts)
-        return ""
+    def _extract_text(el: Any) -> str:
+        """Return all text content of an XML element (including tail of children)."""
+        if el is None:
+            return ""
+        return (ET.tostring(el, encoding="unicode", method="text") or "").strip()
 
     def save_results(self, records: list[dict], path: str | None = None) -> Path:
         """Save *records* as JSON to *path* (default: outputs/pubmed_raw.json)."""
