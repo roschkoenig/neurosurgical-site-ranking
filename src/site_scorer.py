@@ -3,6 +3,7 @@ site_scorer.py – Compute site-level KOL and cluster-depth scores.
 
 Input:  authors_df   – author metrics + canonical_site column
 Output: site_scores  – one row per canonical site with aggregated metrics
+        kol_candidates – top-centile KOL authors affiliated with canonical sites
 
 Site metrics computed:
     top_author_score    – highest author_kol_score among affiliated authors
@@ -13,12 +14,19 @@ Site metrics computed:
     site_kol_score      – composite weighted score (0–100)
     top_authors         – semicolon-separated list of up to 20 top author names
 
+KOL candidate output (kol_candidates):
+    All author columns from authors_df plus kol_centile_rank, filtered to
+    authors with a confirmed canonical-site affiliation whose author_kol_score
+    is in the top ``top_centile`` percent (default 30 %).
+
 Usage example
 -------------
 >>> from src.site_scorer import SiteScorer
 >>> scorer = SiteScorer()
 >>> site_scores = scorer.compute(authors_df)
 >>> scorer.save(site_scores)
+>>> candidates = scorer.kol_candidates(authors_df)
+>>> scorer.save_kol_candidates(candidates)
 """
 
 import logging
@@ -162,4 +170,79 @@ class SiteScorer:
         dest = Path(path) if path else output_dir() / "site_scores.csv"
         site_df.to_csv(dest, index=False)
         logger.info("Saved %d site rows to %s", len(site_df), dest)
+        return dest
+
+    # ------------------------------------------------------------------
+    # KOL candidate list
+    # ------------------------------------------------------------------
+
+    def kol_candidates(
+        self,
+        authors_df: pd.DataFrame,
+        top_centile: float = 30.0,
+    ) -> pd.DataFrame:
+        """
+        Return site-affiliated authors whose KOL score is in the top
+        *top_centile* percent.
+
+        Only authors with a confirmed canonical-site match
+        (``site_confidence`` ≥ 0.65) are considered.  Among those, the
+        score threshold is the (100 − *top_centile*)th percentile of
+        ``author_kol_score``, so with the default ``top_centile=30`` the
+        function returns authors at or above the 70th percentile.
+
+        A ``kol_centile_rank`` column (1 = highest score) is added to the
+        returned DataFrame.
+
+        Parameters
+        ----------
+        authors_df  : author metrics DataFrame; must contain
+                      ``author_kol_score``, ``canonical_site``, and
+                      ``site_confidence`` columns.
+        top_centile : percentage of top scorers to retain (default 30 %).
+
+        Returns a DataFrame sorted by ``author_kol_score`` descending.
+        """
+        required = {"author_kol_score", "canonical_site", "site_confidence"}
+        if authors_df.empty or not required.issubset(authors_df.columns):
+            missing = required - set(authors_df.columns)
+            logger.warning(
+                "authors_df is empty or missing columns: %s", missing or "(empty)"
+            )
+            return pd.DataFrame()
+
+        # Filter to confidently site-matched authors
+        df = authors_df[
+            (authors_df["canonical_site"] != "")
+            & (authors_df["site_confidence"] >= 0.65)
+        ].copy()
+
+        if df.empty:
+            logger.warning("No site-affiliated authors found for KOL candidate list.")
+            return pd.DataFrame()
+
+        # Determine the score threshold for the requested centile
+        percentile_cutoff = 100.0 - top_centile
+        threshold = df["author_kol_score"].quantile(percentile_cutoff / 100.0)
+
+        candidates = df[df["author_kol_score"] >= threshold].copy()
+        candidates.sort_values("author_kol_score", ascending=False, inplace=True)
+        candidates.reset_index(drop=True, inplace=True)
+        candidates.insert(0, "kol_centile_rank", range(1, len(candidates) + 1))
+
+        logger.info(
+            "KOL candidates (top %.0f %%): %d authors (score ≥ %.2f)",
+            top_centile,
+            len(candidates),
+            threshold,
+        )
+        return candidates
+
+    def save_kol_candidates(
+        self, candidates_df: pd.DataFrame, path: str | None = None
+    ) -> Path:
+        """Save KOL candidates to CSV."""
+        dest = Path(path) if path else output_dir() / "kol_candidates.csv"
+        candidates_df.to_csv(dest, index=False)
+        logger.info("Saved %d KOL candidate rows to %s", len(candidates_df), dest)
         return dest
