@@ -2,10 +2,12 @@
 site_matcher.py – Map raw affiliation strings to canonical site names.
 
 Matching pipeline (in order):
-    1. Exact alias match       (match_method = "exact_alias")
-    2. Fuzzy match             (match_method = "fuzzy")
-    3. Optional LLM step       (match_method = "llm")   [only for unresolved]
-    4. Unresolved bucket       (match_method = "unresolved")
+    1. Per-chunk exact alias match  (match_method = "exact_alias")
+       – split on ";", strip country tags (e.g. |GB), normalise, then look
+         up each chunk in the alias table.
+    2. Fuzzy match                  (match_method = "fuzzy")
+    3. Optional LLM step            (match_method = "llm")   [only for unresolved]
+    4. Unresolved bucket            (match_method = "unresolved")
 
 The function ``match_affiliation`` is deterministic for steps 1–2.  The LLM
 step (step 3) is only triggered when ``use_llm=True`` and the deterministic
@@ -27,6 +29,7 @@ Usage example
 import csv
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +115,12 @@ class SiteMatcher:
         """
         Map a single raw affiliation string to a canonical site.
 
+        The *affiliation* string may contain multiple institutions separated
+        by semicolons and/or trailing country tags (e.g. ``|GB``).  The
+        method splits the string into chunks, strips country tags, and
+        attempts exact alias matching on each chunk before falling back to
+        fuzzy matching on the full normalised string.
+
         Returns
         -------
         dict with keys:
@@ -129,26 +138,21 @@ class SiteMatcher:
             self._audit.append(result)
             return result
 
-        norm = normalise_text(affiliation)
-
-        # ---- Step 1: Exact alias match ----
-        if norm in self._alias_map:
-            result["canonical_site"] = self._alias_map[norm]
-            result["confidence"] = 1.0
-            result["match_method"] = "exact_alias"
-            self._audit.append(result)
-            return result
-
-        # Partial exact match: any alias that is a substring of the normalised affiliation
-        for alias_norm, canonical in self._alias_map.items():
-            if alias_norm and alias_norm in norm:
-                result["canonical_site"] = canonical
-                result["confidence"] = 0.95
+        # ---- Step 1: Per-chunk exact alias match ----
+        # Split on semicolons, strip trailing country tags (|GB, |US, …),
+        # normalise each chunk and look it up in the alias table.
+        for raw_chunk in affiliation.split(";"):
+            chunk = re.sub(r"\|[A-Za-z]{2,3}\s*$", "", raw_chunk).strip()
+            chunk_norm = normalise_text(chunk)
+            if chunk_norm and chunk_norm in self._alias_map:
+                result["canonical_site"] = self._alias_map[chunk_norm]
+                result["confidence"] = 1.0
                 result["match_method"] = "exact_alias"
                 self._audit.append(result)
                 return result
 
         # ---- Step 2: Fuzzy match ----
+        norm = normalise_text(affiliation)
         if self._canonical_sites:
             best = process.extractOne(
                 norm,
@@ -275,14 +279,9 @@ class SiteMatcher:
                 "match_method": "unresolved",
             }
             for aff_entry in aff_string.split("; "):
-                # Format: "Institution Name|CountryCode"
-                parts = aff_entry.split("|")
-                aff_name = parts[0].strip()
-                country = parts[1].strip().upper() if len(parts) > 1 else ""
-                # Only consider US affiliations
-                if country and country not in ("US", "USA", ""):
-                    continue
-                result = self.match_affiliation(aff_name, author_id=author_id)
+                # Pass the raw entry (e.g. "Institution Name|CountryCode") directly;
+                # match_affiliation strips country tags internally.
+                result = self.match_affiliation(aff_entry.strip(), author_id=author_id)
                 if result["confidence"] > best_result["confidence"]:
                     best_result = result
                 if best_result["confidence"] >= 0.95:

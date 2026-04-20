@@ -70,18 +70,30 @@ def cache_set(namespace: str, key: str, value: Any) -> None:
 
 def normalise_text(text: str) -> str:
     """
-    Lower-case, strip accents, collapse whitespace, remove punctuation.
-    Used for fuzzy affiliation matching.
+    Lower-case, strip accents, remove apostrophes, collapse whitespace,
+    remove punctuation.  Used for affiliation matching.
+
+    Normalisation steps (in order):
+    1. Replace curly apostrophes (\\u2018, \\u2019) with straight apostrophes.
+    2. Remove all apostrophes entirely.
+    3. Unicode-normalise (NFKD) and strip combining characters (accents).
+    4. Lower-case.
+    5. Replace any remaining non-alphanumeric characters with a space.
+    6. Collapse runs of whitespace.
     """
     if not text:
         return ""
-    # Unicode normalise and strip combining characters (accents)
+    # 1+2. Normalise apostrophes: curly → straight, then remove entirely
+    text = text.replace("\u2019", "'").replace("\u2018", "'")
+    text = text.replace("'", "")
+    # 3. Unicode normalise and strip combining characters (accents)
     nfkd = unicodedata.normalize("NFKD", text)
     ascii_text = "".join(c for c in nfkd if not unicodedata.combining(c))
+    # 4. Lower-case
     lower = ascii_text.lower()
-    # Replace common separators / punctuation with space
+    # 5. Replace remaining punctuation / separators with space
     cleaned = re.sub(r"[^a-z0-9 ]", " ", lower)
-    # Collapse runs of whitespace
+    # 6. Collapse runs of whitespace
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
