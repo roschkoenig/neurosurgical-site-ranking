@@ -11,6 +11,7 @@ Site metrics computed:
     mean_top5           – mean of top-5 author_kol_scores
     cluster_depth       – number of unique authors affiliated with the site
     site_kol_score      – composite weighted score (0–100)
+    top_authors         – semicolon-separated list of up to 20 top author names
 
 Usage example
 -------------
@@ -60,15 +61,26 @@ class SiteScorer:
 
     # ------------------------------------------------------------------
 
-    def compute(self, authors_df: pd.DataFrame) -> pd.DataFrame:
+    def compute(
+        self, authors_df: pd.DataFrame, top_n_authors: int = 20
+    ) -> pd.DataFrame:
         """
         Compute site-level metrics from *authors_df*.
 
         *authors_df* must have columns:
             author_id, author_kol_score, canonical_site, site_confidence
 
+        Optional column:
+            display_name – used to populate the ``top_authors`` list
+
         Only authors with site_confidence ≥ 0.65 are included in site
         aggregation (low-confidence matches are excluded to avoid noise).
+
+        Parameters
+        ----------
+        authors_df    : author metrics DataFrame (see above)
+        top_n_authors : maximum number of author names to include in
+                        the ``top_authors`` column (default 20)
 
         Returns a DataFrame sorted by site_kol_score descending.
         """
@@ -86,14 +98,27 @@ class SiteScorer:
             logger.warning("No confidently matched authors found for site scoring.")
             return pd.DataFrame()
 
+        has_names = "display_name" in df.columns
+
         rows = []
         for site, group in df.groupby("canonical_site"):
-            scores = group["author_kol_score"].sort_values(ascending=False).tolist()
+            group_sorted = group.sort_values("author_kol_score", ascending=False)
+            scores = group_sorted["author_kol_score"].tolist()
             top_score = scores[0] if scores else 0.0
             top3 = sum(scores[:3])
             mean_top5 = sum(scores[:5]) / min(len(scores), 5) if scores else 0.0
             above_thresh = int(sum(1 for s in scores if s >= self.score_threshold))
             depth = len(scores)
+
+            if has_names:
+                top_names = (
+                    group_sorted["display_name"]
+                    .dropna()
+                    .head(top_n_authors)
+                    .tolist()
+                )
+            else:
+                top_names = []
 
             rows.append(
                 {
@@ -103,6 +128,7 @@ class SiteScorer:
                     "authors_above_threshold": above_thresh,
                     "mean_top5": round(mean_top5, 2),
                     "cluster_depth": depth,
+                    "top_authors": "; ".join(top_names),
                 }
             )
 
