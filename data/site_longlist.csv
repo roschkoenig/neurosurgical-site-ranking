@@ -1,22 +1,93 @@
-canonical_site,state,notes
-Mayo Clinic (Rochester),MN,Major NCI-designated cancer centre; active GBM surgical programme
-UCSF Medical Center,CA,Highly active GBM surgical programme; large research output
-MD Anderson Cancer Center,TX,Comprehensive cancer centre; prominent GBM trials
-Johns Hopkins Hospital,MD,Prominent neurosurgery department
-Massachusetts General Hospital,MA,Harvard affiliate; active neuro-oncology
-Cleveland Clinic,OH,Large neurosurgical volume
-Columbia University Medical Center,NY,Major academic centre
-University of Michigan,MI,Active GBM surgical programme
-Northwestern Memorial Hospital,IL,Major academic centre; Lurie Cancer Center
-Duke University Medical Center,NC,Active GBM and neuro-oncology programme
-Brigham and Women's Hospital,MA,Harvard affiliate; Dana-Farber partnership
-UCLA Medical Center,CA,UC system; active neuro-oncology trials
-University of Pittsburgh Medical Center,PA,Large neurosurgical programme
-Stanford University Medical Center,CA,Active GBM surgical and research programme
-NYU Langone Health,NY,Active neuro-oncology programme
-Memorial Sloan Kettering Cancer Center,NY,Comprehensive cancer centre
-Emory University Hospital,GA,Southeastern academic centre
-Houston Methodist Hospital,TX,Active neurosurgical programme
-University of Washington,WA,NCI-designated; Seattle Cancer Care Alliance
-University of Colorado Hospital,CO,NCI-designated cancer centre
-Thomas Jefferson University Hospital,PA,Active neuro-oncology programme
+"canonical_site","state","notes"
+"Abbott Northwestern Hospital, Minneapolis","Minnesota","Abbott Northwestern / Allina Health ecosystem."
+"Addenbrooke's Hospital, Cambridge","East of England","Cambridge University Hospitals / University of Cambridge ecosystem."
+"Austin Health, Heidelberg","Victoria","Austin Health / Austin Hospital / University of Melbourne ecosystem."
+"Barking, Havering and Redbridge University Hospitals, Romford","East of England","BHRUT ecosystem including Queen's Hospital Romford and King George Hospital."
+"Barrow Neurological Institute, Phoenix","Arizona","Barrow / St. Joseph's Hospital and Medical Center ecosystem."
+"Baylor College of Medicine, Houston","Texas","Baylor College of Medicine ecosystem; includes Baylor St. Luke's / Dan L Duncan aliases."
+"Calvary Mater Newcastle, Waratah","New South Wales","Calvary Mater / University of Newcastle ecosystem."
+"Charing Cross Hospital, London","Greater London","Charing Cross / Imperial College Healthcare / Imperial College London ecosystem."
+"Cleveland Clinic, Cleveland","Ohio","Cleveland Clinic ecosystem; includes Cleveland Clinic Foundation / Neurological Institute aliases."
+"Columbia University, New York","New York","Columbia / CUIMC / NewYork-Presbyterian-Columbia ecosystem."
+"Dana Farber Institute, Boston","Massachusetts","Dana-Farber cancer-center ecosystem; Harvard-linked aliases kept Dana-Farber-specific where explicit."
+"Dartmouth Health, Lebanon","New Hampshire","Dartmouth Health / Dartmouth-Hitchcock / Norris Cotton ecosystem."
+"Duke University, Durham","North Carolina","Duke academic and clinical ecosystem including Duke University Hospital and Duke Cancer Institute."
+"Emory University, Atlanta","Georgia","Emory clinical-academic ecosystem including Emory University Hospital and Winship Cancer Institute."
+"Guy's and St Thomas' NHS Foundation Trust, London","Greater London","Guy's and St Thomas' / King's College London ecosystem."
+"Henry Ford Cancer Institute, Detroit","Michigan","Henry Ford Health / Henry Ford Hospital ecosystem."
+"Hull Royal Infirmary, Hull","Yorkshire and the Humber","Hull Royal Infirmary / Hull University Teaching Hospitals / University of Hull ecosystem."
+"John Radcliffe Hospital, Oxford","South East England","John Radcliffe / Oxford University Hospitals / University of Oxford ecosystem."
+"Johns Hopkins University, Baltimore","Maryland","Johns Hopkins academic and hospital ecosystem."
+"King's College Hospital, London","Greater London","King's College Hospital / King's College London / King's Health Partners ecosystem."
+"Leeds Teaching Hospitals, Leeds","Yorkshire and the Humber","Leeds Teaching Hospitals / St James's / University of Leeds ecosystem."
+"Liverpool Hospital, Liverpool","New South Wales","Liverpool Hospital / UNSW-linked ecosystem."
+"Massachusetts General Hospital, Boston","Massachusetts","Massachusetts General Hospital / Mass General ecosystem; Harvard-linked aliases kept hospital-specific."
+"Mayo Clinic, Jacksonville","Florida","Mayo Clinic Florida ecosystem."
+"Mayo Clinic, Phoenix","Arizona","Mayo Clinic Arizona / Scottsdale-Phoenix ecosystem."
+"Mayo Clinic, Rochester","Minnesota","Mayo Clinic Rochester / Minnesota ecosystem."
+"Medical University of South Carolina, Charleston","South Carolina","MUSC / Hollings Cancer Center ecosystem."
+"MD Anderson Cancer Center, Houston","Texas","UT MD Anderson cancer-center ecosystem."
+"Memorial Sloan-Kettering Cancer Center, New York","New York","Memorial Sloan Kettering / MSK ecosystem."
+"Moffitt Cancer Center, Tampa","Florida","Moffitt / University of South Florida ecosystem."
+"Monash Medical Centre, Clayton","Victoria","Monash Medical Centre / Monash Health / Monash University ecosystem."
+"Mount Sinai, New York","New York","Mount Sinai / Icahn School of Medicine ecosystem."
+"Mount Vernon Cancer Centre, Northwood","Greater London","Mount Vernon Cancer Centre ecosystem."
+"North Bristol NHS Trust, Bristol","South West England","North Bristol / Southmead Hospital / University of Bristol ecosystem."
+"Northwestern University, Chicago","Illinois","Northwestern / Northwestern Memorial / Feinberg / Lurie Cancer Center ecosystem."
+"NYU Langone Health, New York","New York","NYU Langone / NYU Grossman medical ecosystem."
+"Oregon Health and Science University, Portland","Oregon","OHSU / Knight Cancer Institute ecosystem."
+"Peter MacCallum Cancer Centre, Melbourne","Victoria","Peter Mac / University of Melbourne ecosystem."
+"Prince of Wales Hospital, Randwick","New South Wales","Prince of Wales / UNSW Sydney ecosystem."
+"Princess Alexandra Hospital, Wooloongabba","Queensland","Princess Alexandra / University of Queensland ecosystem."
+"Queen Elizabeth Hospital, Birmingham","West Midlands","Queen Elizabeth Hospital Birmingham / UHB / University of Birmingham ecosystem."
+"Queen's Medical Centre, Nottingham","East Midlands","Queen's Medical Centre / Nottingham University Hospitals / University of Nottingham ecosystem."
+"Royal Adelaide Hospital, Adelaide","South Australia","Royal Adelaide / University of Adelaide ecosystem."
+"Royal Brisbane & Women's Hospital, Herston","Queensland","RBWH / University of Queensland ecosystem."
+"Royal Hallamshire Hospital, Sheffield","Yorkshire and the Humber","Royal Hallamshire / Sheffield Teaching Hospitals / University of Sheffield ecosystem."
+"Royal Hobart Hospital, Hobart","Tasmania","Royal Hobart / University of Tasmania ecosystem."
+"Royal Melbourne Hospital / Melbourne Health, Melbourne","Victoria","Royal Melbourne Hospital / Melbourne Health / University of Melbourne ecosystem."
+"Royal North Shore Hospital, St Leonards","New South Wales","Royal North Shore / University of Sydney ecosystem."
+"Royal Preston Hospital, Preston","North West England","Royal Preston / Lancashire Teaching Hospitals ecosystem."
+"Royal Prince Alfred Hospital, Sydney","New South Wales","RPA / University of Sydney ecosystem."
+"Royal Victoria Infirmary, Newcastle","North East England","Royal Victoria Infirmary / Newcastle Hospitals / Newcastle University ecosystem."
+"Salford Royal, Manchester","North West England","Salford Royal / Northern Care Alliance / University of Manchester ecosystem."
+"Sir Charles Gairdner Hospital, Nedlands","Western Australia","Sir Charles Gairdner / UWA ecosystem."
+"Southampton General Hospital, Southampton","South East England","Southampton General / University Hospital Southampton / University of Southampton ecosystem."
+"Southern General Hospital, Glasgow","Scotland","Southern General / Queen Elizabeth University Hospital / University of Glasgow ecosystem."
+"St George's Hospital, London","Greater London","St George's Hospital / St George's University ecosystem."
+"St Vincent's Hospital, Fitzroy","Victoria","St Vincent's Melbourne / University of Melbourne ecosystem."
+"St Vincent's Hospital, Sydney","New South Wales","St Vincent's Sydney / UNSW Sydney ecosystem."
+"Stanford, Stanford","California","Stanford clinical-academic ecosystem including Stanford Health Care / Stanford Medicine."
+"Swedish Neuroscience, Seattle","Washington","Swedish Neuroscience / Swedish Medical Center ecosystem."
+"The Chris O'Brien Lifehouse, Camperdown","New South Wales","Chris O'Brien Lifehouse / University of Sydney ecosystem."
+"The Christie, Manchester","North West England","The Christie / University of Manchester ecosystem."
+"Thomas Jefferson University, Philadelphia","Pennsylvania","Jefferson / Thomas Jefferson University Hospital / Sidney Kimmel ecosystem."
+"Tufts Medical Center, Boston","Massachusetts","Tufts Medical Center / Tufts University medical ecosystem."
+"UCLA, Los Angeles","California","UCLA / Ronald Reagan UCLA / David Geffen ecosystem."
+"UCSD, La Jolla","California","UC San Diego / Moores Cancer Center ecosystem."
+"UCSF, San Francisco","California","UCSF clinical-academic ecosystem including UCSF Medical Center and Brain Tumor Center."
+"University College London Hospital (including NHNN), London","Greater London","UCLH / NHNN / University College London ecosystem."
+"University of Alabama at Birmingham, Birmingham","Alabama","UAB medical ecosystem including O'Neal Comprehensive Cancer Center."
+"University of Chicago, Chicago","Illinois","University of Chicago / UChicago Medicine ecosystem."
+"University of Colorado Hospital","Colorado","University of Colorado / UCHealth ecosystem."
+"University of Florida, Gainesville","Florida","UF / UF Health / Shands ecosystem."
+"University of Kansas, Kansas City","Kansas","University of Kansas / KUMC / KU Cancer Center ecosystem."
+"University of Maryland, Baltimore","Maryland","University of Maryland / UMMC / Greenebaum ecosystem."
+"University of Miami, Miami","Florida","University of Miami / UHealth / Sylvester ecosystem."
+"University of Michigan, Ann Arbor","Michigan","University of Michigan / Michigan Medicine / Rogel ecosystem."
+"University of Oklahoma, Oklahoma City","Oklahoma","University of Oklahoma / OU Health / Stephenson ecosystem."
+"University of Pennsylvania, Philadelphia","Pennsylvania","Penn / HUP / Perelman / Abramson ecosystem."
+"University of Pittsburgh Medical Center, Pittsburgh","Pennsylvania","UPMC / University of Pittsburgh ecosystem."
+"University of Rochester, Rochester","New York","University of Rochester / URMC / Wilmot ecosystem."
+"University of Texas Health Science Center, Houston","Texas","UTHealth Houston / McGovern Medical School ecosystem."
+"University of Texas Southwestern Medical Center, Dallas","Texas","UT Southwestern medical center ecosystem including Simmons Comprehensive Cancer Center."
+"University of Utah, Salt Lake City","Utah","University of Utah / Huntsman Cancer Institute ecosystem."
+"University of Virginia, Charlottesville","Virginia","UVA medical ecosystem."
+"University of Washington, Seattle","Washington","University of Washington / UW Medicine ecosystem."
+"University of Wisconsin, Madison","Wisconsin","UW Madison / UW Health / Carbone Cancer Center ecosystem."
+"Vanderbilt-Ingram Cancer Center, Nashville","Tennessee","Vanderbilt / VUMC / Vanderbilt-Ingram ecosystem."
+"Wake Forest Baptist Comprehensive Cancer Center","North Carolina","Wake Forest / Wake Forest Baptist medical ecosystem."
+"Walton Centre, Liverpool","North West England","Walton Centre / University of Liverpool ecosystem."
+"Washington University, St Louis","Missouri","WashU / Barnes-Jewish / Siteman Cancer Center ecosystem."
+"Western General Hospital, Edinburgh","Scotland","Western General / NHS Lothian / University of Edinburgh ecosystem."
+"Yale University, New Haven","Connecticut","Yale academic and clinical ecosystem (Yale School of Medicine / Yale New Haven Hospital / Yale Cancer Center)."
