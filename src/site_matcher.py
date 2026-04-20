@@ -38,7 +38,7 @@ from src.utils import normalise_text, output_dir
 logger = logging.getLogger(__name__)
 
 FUZZY_HIGH_THRESHOLD = 88   # score ≥ this → high-confidence fuzzy match
-FUZZY_LOW_THRESHOLD = 65    # score ≥ this → low-confidence (may trigger LLM)
+FUZZY_LOW_THRESHOLD = 70    # score ≥ this → low-confidence (may trigger LLM)
 
 
 class SiteMatcher:
@@ -153,7 +153,7 @@ class SiteMatcher:
             best = process.extractOne(
                 norm,
                 [normalise_text(s) for s in self._canonical_sites],
-                scorer=fuzz.token_set_ratio,
+                scorer=fuzz.token_sort_ratio,
             )
             if best is not None:
                 score, idx = best[1], best[2]
