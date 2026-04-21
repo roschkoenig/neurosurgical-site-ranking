@@ -27,10 +27,12 @@ Usage example
 import csv
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import requests
 from rapidfuzz import fuzz, process
 
 from src.utils import normalise_text, output_dir
@@ -50,7 +52,10 @@ class SiteMatcher:
     aliases_csv:   path to CSV with columns canonical_site, alias
     use_llm:       enable LLM adjudication for low-confidence matches
     llm_threshold: fuzzy score below which LLM is invoked (0–100)
-    openai_model:  model name used for LLM step
+    llm_provider:  "openai" (API) or "ollama" (local Llama via Ollama)
+    openai_model:  model name used for OpenAI LLM step
+    ollama_model:  model name served by local Ollama (e.g., llama3.1:8b)
+    ollama_url:    base URL for local Ollama API
     """
 
     def __init__(
@@ -58,11 +63,25 @@ class SiteMatcher:
         aliases_csv: str | Path,
         use_llm: bool = False,
         llm_threshold: float = FUZZY_HIGH_THRESHOLD,
+        llm_provider: str = "openai",
         openai_model: str = "gpt-4o-mini",
+        ollama_model: str = "llama3.1:8b",
+        ollama_url: str = "http://localhost:11434",
     ) -> None:
         self.use_llm = use_llm
         self.llm_threshold = llm_threshold
+        self.llm_provider = llm_provider.strip().lower()
         self.openai_model = openai_model
+        self.ollama_model = ollama_model
+        self.ollama_url = ollama_url.rstrip("/")
+        # If prerequisites are missing, disable LLM once and avoid repeated warnings.
+        self._llm_disabled: bool = False
+
+        if self.llm_provider not in {"openai", "ollama"}:
+            logger.warning(
+                "Unknown llm_provider '%s'; defaulting to openai.", self.llm_provider
+            )
+            self.llm_provider = "openai"
 
         # Load alias table
         self._alias_map: dict[str, str] = {}   # normalised alias -> canonical_site
@@ -193,17 +212,31 @@ class SiteMatcher:
         Returns dict with canonical_site, confidence, rationale on success,
         or None on failure / no confident match.
 
-        Requires ``openai`` package and OPENAI_API_KEY env var.
+        Provider-specific requirements:
+            openai: ``openai`` package and OPENAI_API_KEY env var
+            ollama: local Ollama server and pulled local model
         """
+        if self._llm_disabled:
+            return None
+
+        if self.llm_provider == "ollama":
+            return self._llm_match_ollama(affiliation)
+        return self._llm_match_openai(affiliation)
+
+    def _llm_match_openai(self, affiliation: str) -> dict | None:
+        """OpenAI-backed LLM affiliation adjudication."""
+
         try:
             import openai  # optional dependency
         except ImportError:
             logger.warning("openai package not installed; LLM step skipped.")
+            self._llm_disabled = True
             return None
 
         api_key = os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
             logger.warning("OPENAI_API_KEY not set; LLM step skipped.")
+            self._llm_disabled = True
             return None
 
         site_list = "\n".join(f"- {s}" for s in self._canonical_sites)
@@ -230,20 +263,122 @@ class SiteMatcher:
                 temperature=0,
                 max_tokens=120,
             )
-            content = response.choices[0].message.content.strip()
-            import json
-            data = json.loads(content)
-            best = data.get("best_match", "")
-            # Validate: best must be in canonical list
-            if best in self._canonical_sites:
-                return {
-                    "canonical_site": best,
-                    "confidence": float(data.get("confidence", 0.5)),
-                    "rationale": data.get("rationale", ""),
-                }
+            content = (response.choices[0].message.content or "").strip()
+            data = self._parse_llm_json(content)
+            if data:
+                return data
         except Exception as exc:
             logger.warning("LLM match failed: %s", exc)
 
+        return None
+
+    def _llm_match_ollama(self, affiliation: str) -> dict | None:
+        """Local Ollama-backed LLM affiliation adjudication."""
+        site_list = "\n".join(f"- {s}" for s in self._canonical_sites)
+        prompt = (
+            "You are a research assistant helping map institution affiliations "
+            "to a list of known US neurosurgical trial sites.\n\n"
+            f"Affiliation text: \"{affiliation}\"\n\n"
+            f"Candidate sites:\n{site_list}\n\n"
+            "Instructions:\n"
+            "1. Return the BEST matching canonical site from the list above, "
+            "or 'UNRESOLVED' if no good match exists.\n"
+            "2. Provide a confidence between 0.0 and 1.0.\n"
+            "3. Provide a short rationale (≤20 words).\n"
+            "4. NEVER invent a site not in the list.\n"
+            "5. Respond ONLY with valid JSON in this format:\n"
+            '{"best_match": "...", "confidence": 0.0, "rationale": "..."}'
+        )
+
+        try:
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json={
+                    "model": self.ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json",
+                    "options": {"temperature": 0},
+                },
+                timeout=90,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("error"):
+                logger.warning("Ollama error; LLM step skipped: %s", payload["error"])
+                self._llm_disabled = True
+                return None
+
+            content = (payload.get("response") or "").strip()
+            data = self._parse_llm_json(content)
+            if data:
+                return data
+            logger.warning("Ollama returned unparsable/invalid JSON; LLM match skipped.")
+        except requests.RequestException as exc:
+            logger.warning("Ollama unavailable; LLM step skipped: %s", exc)
+            self._llm_disabled = True
+        except Exception as exc:
+            logger.warning("Ollama LLM match failed: %s", exc)
+
+        return None
+
+    def _parse_llm_json(self, content: str) -> dict | None:
+        """Parse and validate model JSON output for site mapping."""
+        if not content:
+            return None
+
+        import json
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            # Some local models wrap JSON in prose/code fences; extract first JSON object.
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            if not match:
+                return None
+            try:
+                data = json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return None
+
+        best = str(data.get("best_match", "")).strip()
+        if not best or best.upper() == "UNRESOLVED":
+            return None
+
+        # Accept exact canonical names and robustly recover near-matches.
+        if best in self._canonical_sites:
+            canonical = best
+        else:
+            best_norm = normalise_text(best)
+            exact_norm = next(
+                (s for s in self._canonical_sites if normalise_text(s) == best_norm),
+                "",
+            )
+            if exact_norm:
+                canonical = exact_norm
+            else:
+                fuzzy = process.extractOne(
+                    best_norm,
+                    [normalise_text(s) for s in self._canonical_sites],
+                    scorer=fuzz.token_sort_ratio,
+                )
+                if not fuzzy or fuzzy[1] < 90:
+                    return None
+                canonical = self._canonical_sites[fuzzy[2]]
+
+        try:
+            confidence = float(data.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+
+        confidence = max(0.0, min(1.0, confidence))
+
+        if canonical:
+            return {
+                "canonical_site": canonical,
+                "confidence": confidence,
+                "rationale": data.get("rationale", ""),
+            }
         return None
 
     # ------------------------------------------------------------------

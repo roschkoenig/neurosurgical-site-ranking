@@ -8,6 +8,7 @@ Author metrics computed per node:
     weighted_citation_score   – sum(paper_weight * cited_by_count) per paper
     core_surgical_count       – number of core_surgical papers
     recency_score             – recency-weighted activity (recent papers count more)
+    centrifugal_score         – edge-authorship-weighted contribution score
     degree_centrality         – fraction of co-authors relative to all authors
     pagerank                  – PageRank over the co-authorship graph
 
@@ -47,6 +48,19 @@ def _recency_weight(year_str: str, half_life: float = 5.0) -> float:
     return math.exp(-math.log(2) * age / half_life)
 
 
+def _centrifugal_factor(position: int, total_authors: int) -> float:
+    """
+    Edge-biased authorship factor by distance to nearest end.
+
+    For total_authors=5 (1-based positions):
+        1 -> 1.0, 2 -> 0.5, 3 -> 0.25, 4 -> 0.5, 5 -> 1.0
+    """
+    if total_authors <= 1:
+        return 1.0
+    dist_to_edge = min(position, total_authors - 1 - position)
+    return 0.5 ** dist_to_edge
+
+
 class AuthorNetwork:
     """Build and analyse the surgical GBM author co-authorship network."""
 
@@ -84,9 +98,10 @@ class AuthorNetwork:
             year = str(paper.get("year", ""))
 
             authorships = paper.get("authorships", [])
+            n_authors = len(authorships)
             author_ids = []
 
-            for auth in authorships:
+            for idx, auth in enumerate(authorships):
                 # OpenAlex authorship dict structure:
                 # {"author": {"id": "...", "display_name": "..."}, "institutions": [...]}
                 author_obj = auth.get("author") or {}
@@ -109,9 +124,11 @@ class AuthorNetwork:
                         )
 
                 # Record this author's contribution to the paper
+                position_factor = _centrifugal_factor(idx, n_authors)
                 self._contributions[short_id].append(
                     {
                         "paper_weight": weight,
+                        "position_factor": position_factor,
                         "cited_by_count": citations,
                         "recency_weight": _recency_weight(year),
                         "label": label,
@@ -148,7 +165,8 @@ class AuthorNetwork:
 
         Columns:
             author_id, display_name, weighted_citation_score,
-            core_surgical_count, recency_score, degree_centrality, pagerank,
+            core_surgical_count, recency_score, centrifugal_score,
+            degree_centrality, pagerank,
             affiliations (pipe-separated unique strings)
         """
         if self.graph.number_of_nodes() == 0:
@@ -171,12 +189,15 @@ class AuthorNetwork:
         rows = []
         for author_id, contribs in self._contributions.items():
             weighted_citation = sum(
-                c["paper_weight"] * c["cited_by_count"] for c in contribs
+                c["paper_weight"] * c["position_factor"] * c["cited_by_count"]
+                for c in contribs
             )
             core_count = sum(1 for c in contribs if c["label"] == "core_surgical")
             recency = sum(
-                c["paper_weight"] * c["recency_weight"] for c in contribs
+                c["paper_weight"] * c["position_factor"] * c["recency_weight"]
+                for c in contribs
             )
+            centrifugal = sum(c["paper_weight"] * c["position_factor"] for c in contribs)
             # Unique affiliations (deduplicated, US-filtered later by site matcher)
             aff_list = list(dict.fromkeys(self._affiliations.get(author_id, [])))
 
@@ -187,6 +208,7 @@ class AuthorNetwork:
                     "weighted_citation_score": round(weighted_citation, 2),
                     "core_surgical_count": core_count,
                     "recency_score": round(recency, 4),
+                    "centrifugal_score": round(centrifugal, 4),
                     "degree_centrality": round(
                         degree_centrality.get(author_id, 0.0), 6
                     ),
@@ -210,10 +232,11 @@ class AuthorNetwork:
         Add a composite KOL score (0–100 scale) to *df*.
 
         Weights:
-            weighted_citation_score  40 %
-            core_surgical_count      30 %
+            weighted_citation_score  35 %
+            core_surgical_count      25 %
             recency_score            15 %
             pagerank                 15 %
+            centrifugal_score        10 %
         """
         def _norm(col: str) -> pd.Series:
             mn, mx = df[col].min(), df[col].max()
@@ -222,10 +245,11 @@ class AuthorNetwork:
             return (df[col] - mn) / (mx - mn)
 
         df["author_kol_score"] = (
-            0.40 * _norm("weighted_citation_score")
-            + 0.30 * _norm("core_surgical_count")
+            0.35 * _norm("weighted_citation_score")
+            + 0.25 * _norm("core_surgical_count")
             + 0.15 * _norm("recency_score")
             + 0.15 * _norm("pagerank")
+            + 0.10 * _norm("centrifugal_score")
         ) * 100
         df["author_kol_score"] = df["author_kol_score"].round(2)
         return df
