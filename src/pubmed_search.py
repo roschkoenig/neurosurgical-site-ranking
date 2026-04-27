@@ -258,3 +258,74 @@ class PubMedSearcher:
         save_json(records, dest)
         logger.info("Saved %d PubMed records to %s", len(records), dest)
         return dest
+
+    # ------------------------------------------------------------------
+    # Targeted site-level enrichment
+    # ------------------------------------------------------------------
+
+    SITE_ENRICHMENT_BASE = (
+        '(glioblastoma OR "high-grade glioma" OR "glioblastoma multiforme")'
+        ' AND (surgery OR resection OR craniotomy OR "extent of resection")'
+        ' AND humans[MeSH] AND English[lang]'
+    )
+
+    def search_by_sites(
+        self,
+        site_aliases_map: dict[str, list[str]],
+        max_per_site: int = 50,
+    ) -> list[str]:
+        """
+        Targeted PubMed search for papers affiliated with specific sites.
+
+        Intended for enrichment of *missing* candidate sites (sites in the
+        longlist that returned no matched authors in the main pipeline run).
+
+        For each site, ALL provided aliases are combined into an OR query
+        using ``[Affiliation]`` field tags, so that e.g. Addenbrooke's Hospital
+        is searched as both "Addenbrooke's" and "Cambridge University Hospitals".
+
+        Results are cached per site. Up to 5 aliases are used per query to
+        stay within PubMed query length limits.
+
+        Parameters
+        ----------
+        site_aliases_map : dict mapping canonical site name -> list of aliases.
+                           Typically obtained via ``SiteMatcher.aliases_for_sites()``.
+        max_per_site     : maximum PMIDs to retrieve per site (default 50)
+
+        Returns a deduplicated list of PMIDs across all queried sites.
+        """
+        pmids: set[str] = set()
+        for site, aliases in site_aliases_map.items():
+            if not aliases:
+                aliases = [site]
+            # Build an OR query over up to 5 aliases to stay within URL limits
+            affil_terms = " OR ".join(
+                f'"{a}"[Affiliation]' for a in aliases[:5]
+            )
+            query = f"{self.SITE_ENRICHMENT_BASE} AND ({affil_terms})"
+            cache_key = f"esearch::site_enrichment_v2::{site}::{max_per_site}"
+            cached = cache_get("pubmed_search", cache_key)
+            if cached is not None:
+                logger.info(
+                    "Site enrichment cache hit for '%s': %d PMIDs", site, len(cached)
+                )
+                pmids.update(cached)
+                continue
+            try:
+                data = self._get(
+                    f"{EUTILS_BASE}/esearch.fcgi",
+                    {"db": "pubmed", "term": query, "retmax": max_per_site},
+                )
+                ids = data.get("esearchresult", {}).get("idlist", [])
+                cache_set("pubmed_search", cache_key, ids)
+                pmids.update(ids)
+                logger.info(
+                    "Site enrichment '%s' (%d aliases): %d PMIDs found",
+                    site, len(aliases), len(ids),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "PubMed site enrichment failed for '%s': %s", site, exc
+                )
+        return list(pmids)

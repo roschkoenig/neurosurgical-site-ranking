@@ -84,8 +84,9 @@ class SiteMatcher:
             self.llm_provider = "openai"
 
         # Load alias table
-        self._alias_map: dict[str, str] = {}   # normalised alias -> canonical_site
+        self._alias_map: dict[str, str] = {}          # normalised alias -> canonical_site
         self._canonical_sites: list[str] = []
+        self._canonical_aliases: dict[str, list[str]] = {}  # canonical -> [original aliases]
         self._load_aliases(aliases_csv)
 
         # Audit log (populated during matching)
@@ -109,6 +110,8 @@ class SiteMatcher:
                     canonical_set.add(canonical)
                     if alias:
                         self._alias_map[normalise_text(alias)] = canonical
+                        # Track original (non-normalised) alias for targeted search
+                        self._canonical_aliases.setdefault(canonical, []).append(alias)
                     # Also register the canonical name itself as an alias
                     self._alias_map[normalise_text(canonical)] = canonical
         except FileNotFoundError:
@@ -414,9 +417,8 @@ class SiteMatcher:
                 parts = aff_entry.split("|")
                 aff_name = parts[0].strip()
                 country = parts[1].strip().upper() if len(parts) > 1 else ""
-                # Only consider US affiliations
-                if country and country not in ("US", "USA", ""):
-                    continue
+                # Country filter removed: allow all countries so that UK/AUS/EU
+                # affiliations can be matched to international candidate sites.
                 result = self.match_affiliation(aff_name, author_id=author_id)
                 if result["confidence"] > best_result["confidence"]:
                     best_result = result
@@ -451,3 +453,23 @@ class SiteMatcher:
         unresolved.to_csv(dest, index=False)
         logger.info("Saved %d unresolved rows to %s", len(unresolved), dest)
         return dest
+
+    def aliases_for_sites(self, site_names: list[str]) -> dict[str, list[str]]:
+        """
+        Return a dict mapping each canonical site name to its list of known aliases.
+
+        Used by the targeted enrichment step to build alias-aware PubMed queries.
+        Sites with no aliases in site_aliases.csv fall back to the canonical name.
+
+        Parameters
+        ----------
+        site_names : canonical site names (from site_longlist.csv)
+
+        Returns
+        -------
+        dict  {canonical_site: [alias1, alias2, ...]}
+        """
+        return {
+            s: (self._canonical_aliases.get(s) or [s])
+            for s in site_names
+        }

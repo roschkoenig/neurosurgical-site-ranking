@@ -72,6 +72,10 @@ class AuthorNetwork:
         self._names: dict[str, str] = {}
         # author_id -> list of raw authorship affiliation strings
         self._affiliations: dict[str, list[str]] = defaultdict(list)
+        # author_id -> {label -> set of paper IDs} for unique paper counting
+        self._paper_contributions: dict[str, dict[str, set]] = defaultdict(
+            lambda: {"core_surgical": set(), "surgery_adjacent": set()}
+        )
 
     # ------------------------------------------------------------------
     # Graph construction
@@ -88,7 +92,7 @@ class AuthorNetwork:
             cited_by_count – int
             year         – string publication year
         """
-        for paper in papers:
+        for paper_idx, paper in enumerate(papers):
             label = paper.get("label", "non_core")
             if label == "non_core":
                 continue  # exclude non-core papers from network
@@ -96,6 +100,7 @@ class AuthorNetwork:
             weight = float(paper.get("paper_weight", 1.0))
             citations = int(paper.get("cited_by_count", 0))
             year = str(paper.get("year", ""))
+            paper_id = str(paper.get("pmid") or paper.get("openalex_id") or paper_idx)
 
             authorships = paper.get("authorships", [])
             n_authors = len(authorships)
@@ -134,6 +139,9 @@ class AuthorNetwork:
                         "label": label,
                     }
                 )
+                # Track paper IDs per label for unique-paper counting at site level
+                if label in ("core_surgical", "surgery_adjacent"):
+                    self._paper_contributions[short_id][label].add(paper_id)
 
                 # Add node
                 if short_id not in self.graph:
@@ -168,6 +176,10 @@ class AuthorNetwork:
             core_surgical_count, recency_score, centrifugal_score,
             degree_centrality, pagerank,
             affiliations (pipe-separated unique strings)
+
+        Authors are deduplicated by ``author_id`` so that any accidental
+        duplicates from the contribution accumulation step produce exactly
+        one row per OpenAlex ID.
         """
         if self.graph.number_of_nodes() == 0:
             logger.warning("Author graph is empty – no metrics to compute.")
@@ -193,6 +205,7 @@ class AuthorNetwork:
                 for c in contribs
             )
             core_count = sum(1 for c in contribs if c["label"] == "core_surgical")
+            surgery_adj_count = sum(1 for c in contribs if c["label"] == "surgery_adjacent")
             recency = sum(
                 c["paper_weight"] * c["position_factor"] * c["recency_weight"]
                 for c in contribs
@@ -207,6 +220,7 @@ class AuthorNetwork:
                     "display_name": self._names.get(author_id, author_id),
                     "weighted_citation_score": round(weighted_citation, 2),
                     "core_surgical_count": core_count,
+                    "surgery_adjacent_count": surgery_adj_count,
                     "recency_score": round(recency, 4),
                     "centrifugal_score": round(centrifugal, 4),
                     "degree_centrality": round(
@@ -219,6 +233,9 @@ class AuthorNetwork:
 
         df = pd.DataFrame(rows)
         if not df.empty:
+            # Deduplicate by author_id (keep first; contributions are already
+            # accumulated per-ID so duplicates should not occur, but guard anyway)
+            df = df.drop_duplicates(subset=["author_id"], keep="first")
             # Composite author score: normalise and combine
             df = self._add_composite_score(df)
             df.sort_values("author_kol_score", ascending=False, inplace=True)
@@ -266,3 +283,23 @@ class AuthorNetwork:
         df.to_csv(dest, index=False)
         logger.info("Saved %d author rows to %s", len(df), dest)
         return dest
+
+    def paper_label_sets(self) -> dict[str, dict[str, frozenset]]:
+        """
+        Return per-author sets of paper IDs grouped by classification label.
+
+        Used by SiteScorer to compute site-level unique paper counts
+        (n_core_surgical_papers, n_surgery_adjacent_papers) without
+        double-counting papers that have multiple affiliated authors.
+
+        Returns
+        -------
+        dict  {author_id: {"core_surgical": frozenset, "surgery_adjacent": frozenset}}
+        """
+        return {
+            aid: {
+                lbl: frozenset(ids)
+                for lbl, ids in lmap.items()
+            }
+            for aid, lmap in self._paper_contributions.items()
+        }
